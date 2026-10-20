@@ -27,6 +27,8 @@ public class Importer {
     public static final int LIMIT = 300;
     /** GIF 的帧延时刻度就是 10ms（centisecond），按这个步长采样不会丢帧。 */
     public static final int STEP_MS = 10;
+    /** GIF 帧时长的下限。低于 20ms 的帧，多数播放器会按 100ms 播，画面会抖。 */
+    public static final int MIN_FRAME_MS = 20;
 
     public interface Progress {
         void on(String msg, int done, int total);
@@ -104,7 +106,8 @@ public class Importer {
                 Canvas c = new Canvas(work);
                 Bitmap prev = null;
                 int hold = 0;
-                int written = 0;
+                final java.util.ArrayList<Bitmap> frames = new java.util.ArrayList<>();
+                final java.util.ArrayList<Integer> holds = new java.util.ArrayList<>();
                 for (int t = 0; t < m.duration(); t += STEP_MS) {
                     work.eraseColor(0);
                     m.setTime(t);
@@ -116,25 +119,44 @@ public class Importer {
                         continue;
                     }
                     if (prev != null) {
-                        e.setDelay(hold);
-                        if (e.addFrame(scale(prev))) {
-                            written++;
-                        }
+                        frames.add(scale(prev));
+                        holds.add(hold);
                         prev.recycle();
                     }
                     prev = cur;
                     hold = STEP_MS;
                 }
                 if (prev != null) {
-                    e.setDelay(hold);
-                    if (e.addFrame(scale(prev))) {
-                        written++;
-                    }
+                    frames.add(scale(prev));
+                    holds.add(hold);
                     prev.recycle();
                 }
                 work.recycle();
+
+                // 短于 20ms 的帧会被播放器当成异常值，一律按 100ms 播，
+                // 画面就成了慢动作加跳动。合并到相邻帧，保住原来的总时长。
+                for (int i = frames.size() - 1; i >= 0 && frames.size() > 1; i--) {
+                    if (holds.get(i) >= MIN_FRAME_MS) {
+                        continue;
+                    }
+                    if (i + 1 < frames.size()) {
+                        holds.set(i + 1, holds.get(i + 1) + holds.get(i));
+                    } else {
+                        holds.set(i - 1, holds.get(i - 1) + holds.get(i));
+                    }
+                    frames.remove(i);
+                    holds.remove(i);
+                }
+
+                int written = 0;
+                for (int i = 0; i < frames.size(); i++) {
+                    e.setDelay(holds.get(i));
+                    if (e.addFrame(frames.get(i))) {
+                        written++;
+                    }
+                }
                 Repo.log("feed: 动图 " + m.width() + "x" + m.height() + " 时长" + m.duration()
-                        + "ms → 输出 " + written + " 帧");
+                        + "ms → 输出 " + written + " 帧，帧时长 " + holds);
                 return written;
             }
             Repo.log("feed: Movie 解不出来（" + raw.length + " 字节），退回静态");
