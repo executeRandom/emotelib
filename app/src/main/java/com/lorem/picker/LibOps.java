@@ -47,6 +47,32 @@ public class LibOps {
         return root;
     }
 
+    /** 往库目录里写一个纯文本文件，用于导出日志这类一次性内容。 */
+    public static boolean writeText(Context ctx, Uri tree, String name, String text) {
+        ContentResolver cr = ctx.getContentResolver();
+        try {
+            DocumentsContract.deleteDocument(cr, docUri(tree, name));
+        } catch (Exception ignored) {
+        }
+        final Uri doc;
+        try {
+            doc = DocumentsContract.createDocument(cr, dirUri(tree), "text/plain", name);
+        } catch (Exception e) {
+            Repo.log("建 " + name + " 失败：" + e);
+            return false;
+        }
+        if (doc == null) {
+            return false;
+        }
+        try (OutputStream os = cr.openOutputStream(doc, "wt")) {
+            os.write(text.getBytes("UTF-8"));
+            os.flush();
+            return true;
+        } catch (Exception e) {
+            Repo.log("写 " + name + " 失败：" + e);
+            return false;
+        }
+    }
     /** 写回库目录里的一个 json：先写临时文件再替换，中途出错不会把原来的弄丢。 */
     public static void writeJson(Context ctx, Uri tree, String name, JSONObject root)
             throws Exception {

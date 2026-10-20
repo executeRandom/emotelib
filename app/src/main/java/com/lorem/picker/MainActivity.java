@@ -1020,6 +1020,113 @@ public class MainActivity extends Activity {
     }
 
     // ---------- 更多 / 关于 ----------
+    /** 导出诊断信息：设备、库状态、最近的日志。用户遇到问题时可以把它发回来。 */
+    private void exportLog() {
+        if (repo.tree() == null) {
+            Toast.makeText(this, "请先在“更多”里授权 EmoteLib 访问存储", Toast.LENGTH_LONG).show();
+            return;
+        }
+        final String name = "日志-"
+                + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+                .format(new java.util.Date()) + ".txt";
+        Toast.makeText(this, "正在导出…", Toast.LENGTH_SHORT).show();
+        repo.pool.execute(() -> {
+            final String report = buildReport();
+            final boolean ok = LibOps.writeText(this, repo.tree(), name, report);
+            runOnUiThread(() -> {
+                if (!ok) {
+                    new android.app.AlertDialog.Builder(this)
+                            .setTitle("导出失败")
+                            .setMessage("写不进表情库目录（是不是没给写入权限？）。"
+                                    + "可以先从“更多”重新授权一次存储。")
+                            .setPositiveButton("好", null)
+                            .show();
+                    return;
+                }
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle("日志已导出")
+                        .setMessage("文件已保存到“下载/EmoteLib/" + name + "”。\n\n"
+                                + "可以直接把文件发给我们，也可以现在选择发送方式。")
+                        .setPositiveButton("发送", (d, w) -> shareLog(report, name))
+                        .setNegativeButton("好", null)
+                        .show();
+            });
+        });
+    }
+
+    private void shareLog(String report, String name) {
+        Intent i = new Intent(Intent.ACTION_SEND);
+        i.setType("text/plain");
+        i.putExtra(Intent.EXTRA_SUBJECT, "EmoteLib " + name);
+        i.putExtra(Intent.EXTRA_TEXT, report);
+        try {
+            startActivity(Intent.createChooser(i, "把日志发到…"));
+        } catch (Exception e) {
+            Toast.makeText(this, "没有可用的发送方式", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 拼一份能看懂的诊断报告。 */
+    private String buildReport() {
+        StringBuilder b = new StringBuilder();
+        String ver = "?";
+        int code = 0;
+        try {
+            android.content.pm.PackageInfo pi =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            ver = pi.versionName;
+            code = pi.versionCode;
+        } catch (Exception ignored) {
+        }
+        int n = 0;
+        synchronized (repo.all) {
+            n = repo.all.size();
+        }
+        int nc = 0;
+        synchronized (repo.cats) {
+            nc = repo.cats.size();
+        }
+        b.append("EmoteLib 诊断信息\n");
+        b.append("==============\n\n");
+        b.append("版本：").append(ver).append("（").append(code).append("）\n");
+        b.append("导出时间：").append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
+                java.util.Locale.US).format(new java.util.Date())).append("\n");
+        b.append("设备：").append(android.os.Build.MANUFACTURER).append(" ")
+                .append(android.os.Build.MODEL).append("\n");
+        b.append("系统：Android ").append(android.os.Build.VERSION.RELEASE)
+                .append("（API ").append(android.os.Build.VERSION.SDK_INT).append("）\n");
+        try {
+            b.append("架构：").append(android.os.Build.SUPPORTED_ABIS[0]).append("\n");
+        } catch (Throwable ignored) {
+        }
+        b.append("\n");
+        b.append("表情库：").append(n).append(" 张，").append(nc).append(" 个分类\n");
+        b.append("库目录：").append(repo.tree()).append("\n");
+        b.append("悬浮球：").append(OverlayService.running ? "运行中" : "未运行").append("\n");
+        b.append("Shizuku：").append(QQImport.serviceUp() ? "已连接" : "未连接").append("\n");
+        b.append("Shizuku 授权：").append(QQImport.ready() ? "已授权" : "未授权").append("\n");
+        b.append("\n---------------- 操作日志 ----------------\n");
+        b.append(tailLog(120 * 1024));
+        return b.toString();
+    }
+
+    /** 取日志文件的最后一段。 */
+    private String tailLog(int maxBytes) {
+        java.io.File f = new java.io.File(getFilesDir(), "dbg.log");
+        if (!f.exists()) {
+            return "（没有日志）\n";
+        }
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
+            long len = raf.length();
+            long from = Math.max(0, len - maxBytes);
+            raf.seek(from);
+            byte[] buf = new byte[(int) (len - from)];
+            raf.readFully(buf);
+            return new String(buf, "UTF-8");
+        } catch (Exception e) {
+            return "（读取日志失败：" + e + "）\n";
+        }
+    }
     private void showMore() {
         final boolean pv = repo.getInt("preview", 0) == 1;
         final boolean bq = repo.getInt("ballqq", 1) == 1;
@@ -1031,7 +1138,8 @@ public class MainActivity extends Activity {
                 pv ? "点击预览：开（单击预览）" : "点击预览：关（单击发送）",
                 su ? "显示使用次数：开" : "显示使用次数：关",
                 bq ? "悬浮球显示：只在 QQ 前台" : "悬浮球显示：一直显示",
-                exempt ? "后台保活：已加入省电白名单" : "后台保活：加入省电白名单…"};
+                exempt ? "后台保活：已加入省电白名单" : "后台保活：加入省电白名单…",
+                "导出日志"};
         new android.app.AlertDialog.Builder(this)
                 .setTitle("更多")
                 .setItems(items, (d, w) -> {
@@ -1045,6 +1153,8 @@ public class MainActivity extends Activity {
                         manageCats();
                     } else if (picked.startsWith("授权 EmoteLib")) {
                         showGrantGuide();
+                    } else if (picked.startsWith("导出日志")) {
+                        exportLog();
                     } else if (picked.startsWith("使用提示")) {
                         showTips();
                     } else if (picked.startsWith("点击预览")) {
