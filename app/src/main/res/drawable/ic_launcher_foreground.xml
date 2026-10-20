@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EmojiLib 图标前景：心形笑脸 + 右下角加号。
+     几何按原 432px 位图逐行量出，用矢量重画，加号不再是放大后的模糊边。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="432"
+    android:viewportHeight="432">
+
+    <!-- 心形轮廓：描边 20 -->
+    <path
+        android:pathData="M216,299 C164,258 123,226 123,188 C123,152 150,134 180,134 C199,134 211,143 216,156 C221,143 233,134 252,134 C282,134 309,152 309,188 C309,226 268,258 216,299 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="20"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 左眼：12 宽、35 高的小竖条 -->
+    <path
+        android:pathData="M189.5,178 L189.5,200"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="12"
+        android:strokeLineCap="round" />
+
+    <!-- 右眼 -->
+    <path
+        android:pathData="M242.5,178 L242.5,200"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="12"
+        android:strokeLineCap="round" />
+
+    <!-- 笑弧：描边 13 -->
+    <path
+        android:pathData="M183,225 Q216,265 249,225"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="13"
+        android:strokeLineCap="round" />
+
+    <!-- 加号：横（描边 10，两端平头） -->
+    <path
+        android:pathData="M269,285.5 L318,285.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt" />
+
+    <!-- 加号：竖 -->
+    <path
+        android:pathData="M293.5,261 L293.5,310"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="butt" />
+</vector>

@@ -1,0 +1,64 @@
+plugins { id 'com.android.application' }
+
+// 签名信息放在 keystore.properties（不进版本库）；文件不存在时 release 就是未签名包
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
+android {
+    namespace 'com.lorem.picker'
+    compileSdk 36
+    defaultConfig {
+        applicationId "com.lorem.picker"
+        minSdk 29
+        targetSdk 36
+        versionCode 12
+        versionName "0.12"
+    }
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        debug { }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError false }
+}
+
+repositories {
+    maven { url 'https://maven.aliyun.com/repository/google' }
+    maven { url 'https://maven.aliyun.com/repository/public' }
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    // 鍊?shell 韬唤璇?QQ 鏀惰棌锛堣 QQImport.java锛?    // provider 浼氭崕甯?androidx.annotation锛氬畠鍙槸缂栬瘧鏈熸敞瑙ｏ紝鎺掓帀锛岄」鐩户缁繚鎸侀浂 androidx
+    implementation('dev.rikka.shizuku:api:13.1.5') {
+        exclude group: 'androidx.annotation'
+    }
+    implementation('dev.rikka.shizuku:provider:13.1.5') {
+        exclude group: 'androidx.annotation'
+    }
+    // IShizukuService / IRemoteProcess锛歋hell 绫讳笉鍦?api 鍖呴噷锛屽彧鑳界洿鎺ヨ皟 AIDL
+    implementation('dev.rikka.shizuku:aidl:13.1.5') {
+        exclude group: 'androidx.annotation'
+    }
+}
+

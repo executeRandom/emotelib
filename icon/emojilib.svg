@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- EmojiLib 应用图标（矢量母版）。几何按原 432px 位图量出，等比例重画。 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="432" height="432" viewBox="0 0 432 432">
+  <rect width="432" height="432" fill="#1E1E1E"/>
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 心形轮廓 -->
+    <path d="M216,299 C164,258 123,226 123,188 C123,152 150,134 180,134 C199,134 211,143 216,156 C221,143 233,134 252,134 C282,134 309,152 309,188 C309,226 268,258 216,299 Z" stroke-width="20"/>
+    <!-- 左右眼 -->
+    <path d="M189.5,178 L189.5,200" stroke-width="12"/>
+    <path d="M242.5,178 L242.5,200" stroke-width="12"/>
+    <!-- 笑弧 -->
+    <path d="M183,225 Q216,265 249,225" stroke-width="13"/>
+    <!-- 加号 -->
+    <path d="M269,285.5 L318,285.5" stroke-width="10" stroke-linecap="butt"/>
+    <path d="M293.5,261 L293.5,310" stroke-width="10" stroke-linecap="butt"/>
+  </g>
+</svg>
