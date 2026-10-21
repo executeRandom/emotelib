@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
     private static final int REQ_OVERLAY = 1002;
     private static final int REQ_NOTIF = 1003;
     private static final int REQ_IMPORT = 1004;
+    private static final int REQ_PICK = 1005;
     private static final int NUM_COLS = 4;
 
     private Repo repo;
@@ -40,6 +41,10 @@ public class MainActivity extends Activity {
     private TextView status;
     private LinearLayout emptyBox;
     private TextView emptyTitle, emptyHint;
+    /** 记住这次要导哪一份；Shizuku 授权回来后自动接着跑。 */
+    private String pendingSrc, pendingStamp, pendingLabel;
+    private boolean pendingFull;
+
     /** 引导弹窗自己得能被里面的链接关掉，用一个单元素数组当引用。 */
     private final android.app.AlertDialog[] dlgHolder = new android.app.AlertDialog[1];
     private TextView statusHint;    // 下面那行操作提示
@@ -354,7 +359,9 @@ public class MainActivity extends Activity {
             (requestCode, grantResult) -> {
                 if (requestCode == QQImport.REQ_SHIZUKU
                         && grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                    runOnUiThread(this::startQqImport);
+                    if (pendingSrc != null) {
+                        runOnUiThread(() -> startQqImport(pendingSrc, pendingFull, pendingStamp, pendingLabel));
+                    }
                 }
             };
 
@@ -527,8 +534,8 @@ public class MainActivity extends Activity {
                 + "这是因为自 Android 11 起，应用访问目录需要用户授权才能正常读写。"
                 + "此后该应用的所有表情文件都将在此目录下存储。\n\n"
                 + "之后您可以向库中导入表情。单击界面顶部的“导入”按钮，"
-                + "可以选择“从相册导入”或“从 QQ 收藏导入”。"
-                + "您需要 Shizuku 才能从 QQ 收藏导入表情。\n\n"
+                + "可以从相册导入，也可以从 QQ 表情收藏导入，"
+                + "或者扫描缓存找回已删除的表情。从 QQ 导入需要 Shizuku。\n\n"
                 + "您随时可以在“更多”菜单中点击“使用引导”来查看这条提示。";
         final android.text.SpannableString body = new android.text.SpannableString(t);
         for (String h : new String[]{"这是什么？", "如何使用？"}) {
@@ -639,6 +646,10 @@ public class MainActivity extends Activity {
             }
             return;
         }
+        if (req == REQ_PICK) {
+            handlePick(res, data);
+            return;
+        }
         if (req == REQ_TREE && res == RESULT_OK && data != null && data.getData() != null) {
             Uri tree = data.getData();
             String docId = null;
@@ -670,14 +681,19 @@ public class MainActivity extends Activity {
 
     /** “导入”按钮：两条来路，二选一。 */
     private void showImportMenu() {
-        final String[] items = {"从相册导入…", "从 QQ 收藏导入…"};
+        final String[] items = {
+                "从相册导入…",
+                "从 QQ 表情收藏导入…",
+                "找回已删除的表情（扫描缓存）…"};
         new android.app.AlertDialog.Builder(this)
                 .setTitle("导入")
                 .setItems(items, (d, w) -> {
                     if (w == 0) {
                         pickImages();
+                    } else if (w == 1) {
+                        startQqImport(QQImport.SRC_FAV, false, ".stamp-fav", "QQ 表情收藏");
                     } else {
-                        startQqImport();
+                        startQqImport(QQImport.SRC_FAV, true, ".stamp-fav", "QQ 表情缓存");
                     }
                 })
                 .show();
@@ -1281,7 +1297,11 @@ public class MainActivity extends Activity {
         return raw;
     }
     /** 从 QQ 收藏导入。先用 Shizuku 把文件搬进库目录，再由 app 转码入库。 */
-    private void startQqImport() {
+    private void startQqImport(String src, boolean fullScan, String stampName, String label) {
+        pendingSrc = src;
+        pendingFull = fullScan;
+        pendingStamp = stampName;
+        pendingLabel = label;
         if (repo.tree() == null) {
             Toast.makeText(this, "请先去“更多”中授权 EmoteLib 访问存储", Toast.LENGTH_LONG).show();
             return;
@@ -1295,7 +1315,7 @@ public class MainActivity extends Activity {
             return;
         }
         final String dir = QQImport.favDir();
-        final String cmd = QQImport.copyCommand(repo.tree());
+        final String cmd = QQImport.copyCommand(repo.tree(), src, fullScan, stampName);
         if (cmd == null) {
             Toast.makeText(this, "表情库路径无效，请从“更多”按要求重新授权", Toast.LENGTH_LONG).show();
             return;
@@ -1304,7 +1324,7 @@ public class MainActivity extends Activity {
         final TextView msg = new TextView(this);
         msg.setTextSize(14);
         msg.setPadding(dp(20), dp(10), dp(20), dp(6));
-        msg.setText("正在从收藏导入到暂存目录…");
+        msg.setText("正在从" + label + "导入到暂存目录…");
         final android.widget.ProgressBar bar = new android.widget.ProgressBar(
                 this, null, android.R.attr.progressBarStyleHorizontal);
         bar.setMax(100);
@@ -1316,7 +1336,7 @@ public class MainActivity extends Activity {
         box.addView(bar);
         final boolean[] stop = {false};
         final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
-                .setTitle("从 QQ 收藏导入")
+                .setTitle(label)
                 .setView(box)
                 .setNegativeButton("取消", (d, w) -> {
                     stop[0] = true;
@@ -1365,25 +1385,86 @@ public class MainActivity extends Activity {
             }
 
             runOnUiThread(() -> {
-                msg.setText("导出完成：已复制 " + copied + " 项，跳过 " + skipped + " 项");
-                new android.app.AlertDialog.Builder(this)
-                        .setTitle("确认导入")
-                        .setMessage("从 QQ 收藏共发现 " + found + " 项。\n\n"
-                                + "其中 " + skipped + " 项已在库中，已跳过；"
-                                + "待转换 " + total + " 项。\n\n"
-                                + "转换会逐项进行，期间可以取消。是否继续？")
-                        .setPositiveButton("开始转换", (d, w) ->
-                                runConvert(dlg, msg, bar, stop, staged, have, total))
-                        .setNegativeButton("稍后", (d, w) -> {
-                            dlg.dismiss();
-                            Toast.makeText(this, "已保留在暂存目录，下次导入会继续处理",
-                                    Toast.LENGTH_LONG).show();
-                        })
-                        .show();
+                dlg.dismiss();
+                Intent pick = new Intent(this, PickImportActivity.class);
+                pick.putExtra("label", label);
+                startActivityForResult(pick, REQ_PICK);
             });
         });
     }
 
+    /** 预览页回来了：选中的进转换，没选中的直接从暂存删掉。 */
+    private void handlePick(int res, Intent data) {
+        final java.util.LinkedHashMap<Uri, String> staged = QQImport.listStaged(this, repo.tree());
+        final java.util.HashSet<String> picked = new java.util.HashSet<>();
+        if (res == RESULT_OK && data != null) {
+            String[] arr = data.getStringArrayExtra(PickImportActivity.EXTRA_NAMES);
+            if (arr != null) {
+                for (String s : arr) {
+                    picked.add(s);
+                }
+            }
+        }
+        final java.util.LinkedHashMap<Uri, String> keep = new java.util.LinkedHashMap<>();
+        final int dropped = 0;
+        for (java.util.Map.Entry<Uri, String> e : staged.entrySet()) {
+            if (picked.contains(e.getValue())) {
+                keep.put(e.getKey(), e.getValue());
+            }
+        }
+        repo.pool.execute(() -> {
+            int removed = 0;
+            for (java.util.Map.Entry<Uri, String> e : staged.entrySet()) {
+                if (!picked.contains(e.getValue())) {
+                    QQImport.deleteStaged(this, e.getKey());
+                    removed++;
+                }
+            }
+            Repo.log("预览结果：保留 " + keep.size() + " 项，删除 " + removed + " 项");
+            runOnUiThread(() -> {
+                if (keep.isEmpty()) {
+                    Toast.makeText(this, "没有选中任何项目，暂存已清空", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                startConvert(keep);
+            });
+        });
+    }
+
+    /** 弹出进度框，开始逐项转码。 */
+    private void startConvert(final java.util.LinkedHashMap<Uri, String> staged) {
+        final java.util.HashSet<String> have = new java.util.HashSet<>();
+        synchronized (repo.all) {
+            for (Sticker s : repo.all) {
+                have.add(s.name);
+            }
+        }
+        final int total = staged.size();
+        final TextView msg = new TextView(this);
+        msg.setTextSize(14);
+        msg.setPadding(dp(20), dp(10), dp(20), dp(6));
+        msg.setText("准备转换…");
+        final android.widget.ProgressBar bar = new android.widget.ProgressBar(
+                this, null, android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(100);
+        bar.setProgress(0);
+        bar.setPadding(dp(20), 0, dp(20), dp(10));
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(msg);
+        box.addView(bar);
+        final boolean[] stop = {false};
+        final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
+                .setTitle("导入中")
+                .setView(box)
+                .setNegativeButton("取消", (d, w) -> {
+                    stop[0] = true;
+                    Toast.makeText(this, "正在停止…", Toast.LENGTH_SHORT).show();
+                })
+                .setCancelable(false)
+                .show();
+        runConvert(dlg, msg, bar, stop, staged, have, total);
+    }
     /** 把暂存目录里的东西逐项转码入库。 */
     private void runConvert(final android.app.AlertDialog dlg, final TextView msg,
                             final android.widget.ProgressBar bar, final boolean[] stop,
@@ -1488,9 +1569,9 @@ public class MainActivity extends Activity {
 
     private void showTips() {
         String s = "导入表情\n"
-                + "单击“导入”后根据情况选择从相册导入或从 QQ 收藏导入。"
-                + "若从 QQ 收藏导入需要 Shizuku 服务，请按提示步骤进行。"
-                + "部分系统可能不支持从 QQ 收藏导入。\n"
+                + "单击“导入”后根据情况选择从相册导入，或从 QQ 表情收藏导入。"
+                + "若从 QQ 导入需要 Shizuku 服务，请按提示步骤进行。"
+                + "部分系统可能不支持此功能。\n"
                 + "导入后，程序将其统一转码为 GIF，便于在 QQ 界面以表情格式发送。"
                 + "根据数量和大小，可能需要一些时间才能完成导入。\n\n"
                 + "发送表情\n"

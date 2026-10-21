@@ -31,8 +31,13 @@ public class QQImport {
     /** 表情库固定位置：下载/EmoteLib（SAF 的 docId 长这样）。 */
     public static final String LIB_DOC_ID = "primary:Download/EmoteLib";
 
-    private static final String QQ_FAV =
+    /** 来源一：表情收藏（长按表情 → 添加到表情）的本地文件。删表情不会清理这里。 */
+    public static final String SRC_FAV =
             "/sdcard/Android/data/com.tencent.mobileqq/Tencent/QQ_Favorite";
+
+    /** 来源二：我的收藏（长按消息 → 收藏）的图片，原图带 _0 后缀。 */
+    public static final String SRC_COLL =
+            "/sdcard/Android/data/com.tencent.mobileqq/Tencent/QQ_Collection/pic";
     private static final String INCOMING = "_incoming";
 
     /** Shizuku 服务在跑、而且已经给过我们授权。 */
@@ -142,7 +147,7 @@ public class QQImport {
     }
 
     public static String favDir() {
-        return QQ_FAV;
+        return SRC_FAV;
     }
 
     public static String incomingDir(Uri tree) {
@@ -155,23 +160,34 @@ public class QQImport {
      * 命中就直接跳过（连临时目录都不进），没命中才按 md5 命名拷进 _incoming。
      * 库里的文件名本来就是转码前那张图的 md5，所以这里比的正是「同一张原图」。
      */
-    public static String copyCommand(Uri tree) {
+    public static String copyCommand(Uri tree, String src, boolean fullScan, String stampName) {
         String lib = fsPath(tree);
         String inc = incomingDir(tree);
         if (lib == null || inc == null) {
             return null;
         }
-        return "fav='" + QQ_FAV + "'; lib='" + lib + "'; inc='" + inc + "'; "
-                + "mkdir -p \"$inc\"; cd \"$fav\" || exit 2; n=0; d=0; "
-                + "for f in *; do "
+        // 我的收藏目录里同一张图有好几档尺寸，只取 _0（原图），其余是预览
+        String nameFilter = SRC_COLL.equals(src)
+                ? "case \"$f\" in *_0) ;; *) continue ;; esac; "
+                : "";
+        String pick = fullScan
+                ? "list=$(find . -maxdepth 1 -type f 2>/dev/null); "
+                : "if [ -f \"$stamp\" ]; then list=$(find . -maxdepth 1 -type f -newer \"$stamp\" 2>/dev/null); "
+                  + "else list=$(find . -maxdepth 1 -type f 2>/dev/null); fi; ";
+        return "src='" + src + "'; lib='" + lib + "'; inc='" + inc + "'; "
+                + "mkdir -p \"$inc\"; cd \"$src\" || exit 2; n=0; d=0; s=0; "
+                + "stamp=\"$inc/" + stampName + "\"; "
+                + pick
+                + "for f in $list; do "
+                + nameFilter
                 + "h=$(head -c 4 \"$f\" | xxd -p); "
                 + "case \"$h\" in "
-                + "ffd8ff*) ext=jpg ;; 474946*) ext=gif ;; 89504e*) ext=png ;; *) continue ;; "
+                + "ffd8ff*) ext=jpg ;; 474946*) ext=gif ;; 89504e*) ext=png ;; *) s=$((s+1)); continue ;; "
                 + "esac; "
                 + "m=$(md5sum \"$f\" | cut -c1-32); "
                 + "if [ -f \"$lib/$m.gif\" ] || [ -f \"$inc/$m.$ext\" ]; then d=$((d+1)); continue; fi; "
                 + "cp \"$f\" \"$inc/$m.$ext\" && n=$((n+1)); "
-                + "done; echo \"copied=$n skip=$d\"";
+                + "done; touch \"$stamp\"; echo \"copied=$n skip=$d other=$s\"";
     }
 
     /** 列出 _incoming 里的东西（URI → 文件名）。 */
@@ -194,6 +210,9 @@ public class QQImport {
                     while (c.moveToNext()) {
                         String id = c.getString(0);
                         String name = c.getString(1);
+                        if (name != null && name.startsWith(".")) {
+                            continue;   // .stamp 这类标记文件不是暂存的表情
+                        }
                         out.put(DocumentsContract.buildDocumentUriUsingTree(tree, id), name);
                     }
                 }

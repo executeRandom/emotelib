@@ -20,8 +20,18 @@ public class SendHelper {
     private static final String QQ_FORWARD = "com.tencent.mobileqq.activity.JumpActivity";
     private static final String ALBUM = "Pictures/表情发送";
 
-    /** 先登记进系统媒体库（相册里的“表情发送”），再拿系统地址分享给 QQ。 */
+    /** 先直接把库里的文件交给 QQ；系统不接受时再退回相册副本。 */
     public static boolean send(Context ctx, Sticker s) {
+        if (shareTo(ctx, s.uri)) {
+            Log.i(TAG, "直接分享库内文件 ok");
+            return true;
+        }
+        Log.w(TAG, "直接分享不成立，退回相册副本");
+        return sendViaAlbum(ctx, s);
+    }
+
+    /** 旧路径：登记进系统媒体库（相册里的“表情发送”），再拿系统地址分享给 QQ。 */
+    private static boolean sendViaAlbum(Context ctx, Sticker s) {
         ContentResolver cr = ctx.getContentResolver();
         Uri out = null;
         try {

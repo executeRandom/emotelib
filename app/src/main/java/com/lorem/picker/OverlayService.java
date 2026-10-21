@@ -752,7 +752,17 @@ public class OverlayService extends Service {
             repo.markUsed(st.name);
             repo.clearPreview();
             hidePanel();
-            SendHelper.send(this, st);
+            // 从 Service 直接投递 QQ 会缺 NEW_TASK；交给中转页，由 Activity 发起分享
+            android.content.Intent si = new android.content.Intent(
+                    OverlayService.this, SendActivity.class);
+            si.putExtra(SendActivity.EXTRA_URI, st.uri.toString());
+            si.putExtra(SendActivity.EXTRA_NAME, st.name);
+            si.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                startActivity(si);
+            } catch (Throwable t) {
+                Repo.log("启动发送中转失败 " + t);
+            }
         });
         grid = g;
         // 表头（+ 分类行）贴着球那一头，网格占剩下的地方

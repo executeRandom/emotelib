@@ -60,5 +60,18 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+            <!-- 导入预览：挑选要转换的项 -->
+        <activity
+            android:name=".PickImportActivity"
+            android:exported="false"
+            android:label="选择要导入的表情"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <!-- 悬浮球分享的中转页：不带界面，发完立即结束 -->
+        <activity
+            android:name=".SendActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
     </application>
 </manifest>
